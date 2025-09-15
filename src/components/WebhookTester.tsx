@@ -16,6 +16,7 @@ interface WebhookResponse {
 
 export const WebhookTester = () => {
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [httpMethod, setHttpMethod] = useState('POST');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<WebhookResponse | null>(null);
@@ -56,24 +57,39 @@ export const WebhookTester = () => {
   };
 
   const sendWebhook = async () => {
-    if (!webhookUrl || !selectedFile) {
+    if (!webhookUrl) {
       toast({
         title: 'Erro',
-        description: 'Por favor, preencha a URL e selecione um arquivo',
+        description: 'Por favor, preencha a URL do webhook',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (httpMethod !== 'GET' && httpMethod !== 'HEAD' && !selectedFile) {
+      toast({
+        title: 'Erro',
+        description: 'Para métodos que não são GET/HEAD, selecione um arquivo',
         variant: 'destructive',
       });
       return;
     }
 
     setIsLoading(true);
-    const formData = new FormData();
-    formData.append('file', selectedFile);
+    
+    const requestOptions: RequestInit = {
+      method: httpMethod,
+    };
+
+    // Para métodos que suportam body, adiciona o arquivo
+    if (httpMethod !== 'GET' && httpMethod !== 'HEAD' && selectedFile) {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      requestOptions.body = formData;
+    }
 
     try {
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await fetch(webhookUrl, requestOptions);
 
       const contentType = res.headers.get('content-type') || '';
       const isFile = contentType.includes('application/') && 
@@ -156,25 +172,44 @@ export const WebhookTester = () => {
         {/* Input Section */}
         <Card className="p-6 bg-gradient-card backdrop-blur-sm border-border/50 shadow-card">
           <div className="space-y-6">
-            <div>
-              <label className="text-sm font-medium mb-2 block">URL do Webhook</label>
-              <Input
-                type="url"
-                placeholder="https://seu-webhook.com/endpoint"
-                value={webhookUrl}
-                onChange={(e) => setWebhookUrl(e.target.value)}
-                className="bg-background/50 border-border/50 focus:border-primary"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-1">
+                <label className="text-sm font-medium mb-2 block">Método</label>
+                <select
+                  value={httpMethod}
+                  onChange={(e) => setHttpMethod(e.target.value)}
+                  className="w-full px-3 py-2 bg-background/50 border border-border/50 rounded-md text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                  <option value="DELETE">DELETE</option>
+                  <option value="HEAD">HEAD</option>
+                </select>
+              </div>
+              <div className="md:col-span-3">
+                <label className="text-sm font-medium mb-2 block">URL do Webhook</label>
+                <Input
+                  type="url"
+                  placeholder="https://seu-webhook.com/endpoint"
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  className="bg-background/50 border-border/50 focus:border-primary"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Arquivo</label>
+              <label className="text-sm font-medium mb-2 block">
+                Arquivo {httpMethod === 'GET' || httpMethod === 'HEAD' ? '(Opcional)' : ''}
+              </label>
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-300 cursor-pointer ${
                   isDragging
                     ? 'border-primary bg-primary/5 shadow-glow'
                     : 'border-border/50 hover:border-primary/50 hover:bg-accent/20'
-                }`}
+                } ${httpMethod === 'GET' || httpMethod === 'HEAD' ? 'opacity-60' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -196,9 +231,17 @@ export const WebhookTester = () => {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-foreground">Arraste um arquivo aqui ou clique para selecionar</p>
+                    <p className="text-foreground">
+                      {httpMethod === 'GET' || httpMethod === 'HEAD' 
+                        ? 'Arquivo opcional - Arraste aqui ou clique para selecionar'
+                        : 'Arraste um arquivo aqui ou clique para selecionar'
+                      }
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      Suporta PDF, imagens, áudio, Excel, CSV e mais
+                      {httpMethod === 'GET' || httpMethod === 'HEAD'
+                        ? 'GET e HEAD não enviam arquivo por padrão'
+                        : 'Suporta PDF, imagens, áudio, Excel, CSV e mais'
+                      }
                     </p>
                   </div>
                 )}
@@ -207,7 +250,7 @@ export const WebhookTester = () => {
 
             <Button
               onClick={sendWebhook}
-              disabled={!webhookUrl || !selectedFile || isLoading}
+              disabled={!webhookUrl || isLoading || (httpMethod !== 'GET' && httpMethod !== 'HEAD' && !selectedFile)}
               className="w-full bg-gradient-primary hover:shadow-glow transition-all duration-300"
             >
               {isLoading ? (
@@ -218,7 +261,7 @@ export const WebhookTester = () => {
               ) : (
                 <>
                   <Send className="w-4 h-4 mr-2" />
-                  Enviar Webhook
+                  Enviar {httpMethod}
                 </>
               )}
             </Button>
